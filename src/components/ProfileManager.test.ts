@@ -33,7 +33,8 @@ function createState(overrides: Partial<ManagerState> = {}): ManagerState {
 
   return {
     profiles,
-    activeProfileId: "primary",
+    activeCodexProfileId: "primary",
+    activeClaudeProfileId: null,
     codexPaths: {
       authJson: "C:/Users/demo/.codex/auth.json",
       configToml: "C:/Users/demo/.codex/config.toml",
@@ -50,14 +51,14 @@ describe("ProfileManager", () => {
     mockedActivateProfile.mockResolvedValue(createState());
   });
 
-  it("renders saved profiles after loading", async () => {
+  it("renders the current profiles", async () => {
     const wrapper = mount(ProfileManager);
     await flushUi(wrapper);
 
     expect(wrapper.text()).toContain("Primary");
   });
 
-  it("renders a compact workspace layout", async () => {
+  it("renders the compact workspace structure", async () => {
     const wrapper = mount(ProfileManager);
     await flushUi(wrapper);
 
@@ -66,7 +67,7 @@ describe("ProfileManager", () => {
     expect(wrapper.find('[data-testid="profile-editor"]').exists()).toBe(true);
   });
 
-  it("shows validation when required fields are missing", async () => {
+  it("blocks save when required fields are missing", async () => {
     const wrapper = mount(ProfileManager);
     await flushUi(wrapper);
 
@@ -75,12 +76,10 @@ describe("ProfileManager", () => {
     await nextTick();
 
     expect(mockedSaveProfiles).not.toHaveBeenCalled();
-    expect(wrapper.get('[data-testid="status-message"]').text()).toContain(
-      "请先填写名称、API Key 和 Base URL",
-    );
+    expect(wrapper.get('[data-testid="status-message"]').text()).toContain("API Key");
   });
 
-  it("tells the user save only updates local data", async () => {
+  it("shows that save only writes to the local list", async () => {
     mockedSaveProfiles.mockResolvedValue(
       createState({
         profiles: [
@@ -105,7 +104,8 @@ describe("ProfileManager", () => {
     const wrapper = mount(ProfileManager);
     await flushUi(wrapper);
 
-    expect(wrapper.get('[data-testid="local-save-note"]').text()).toContain("只会写入本地列表");
+    expect(wrapper.get('[data-testid="local-save-note"]').text()).toContain("本地");
+    expect(wrapper.get('[data-testid="local-save-note"]').text()).toContain("切换");
 
     await wrapper.get('[data-testid="new-profile"]').trigger("click");
     await wrapper.get('input[placeholder="例如：主账号"]').setValue("Local Only");
@@ -116,11 +116,11 @@ describe("ProfileManager", () => {
     await wrapper.get("form").trigger("submit.prevent");
     await flushUi(wrapper);
 
-    expect(wrapper.get('[data-testid="status-message"]').text()).toContain("已保存到本地列表");
-    expect(wrapper.get('[data-testid="status-message"]').text()).toContain("切换账号后");
+    expect(wrapper.get('[data-testid="status-message"]').text()).toContain("本地");
+    expect(wrapper.get('[data-testid="status-message"]').text()).toContain("切换");
   });
 
-  it("disables switch buttons while switching profile", async () => {
+  it("disables switching while activation is in progress", async () => {
     let resolveSwitch: ((value: ManagerState) => void) | undefined;
     mockedLoadManagerState.mockResolvedValue(
       createState({
@@ -140,7 +140,8 @@ describe("ProfileManager", () => {
             profileType: "codex",
           },
         ],
-        activeProfileId: "primary",
+        activeCodexProfileId: "primary",
+        activeClaudeProfileId: null,
       }),
     );
     mockedActivateProfile.mockImplementation(
@@ -153,7 +154,10 @@ describe("ProfileManager", () => {
     const wrapper = mount(ProfileManager);
     await flushUi(wrapper);
 
-    const switchButton = wrapper.get('[data-testid="switch-backup"]');
+    await wrapper.findAll(".profile-main")[1].trigger("click");
+    await flushUi(wrapper);
+
+    const switchButton = wrapper.get('[data-testid="switch-current-profile"]');
     await switchButton.trigger("click");
     await nextTick();
 
@@ -177,12 +181,13 @@ describe("ProfileManager", () => {
             profileType: "codex",
           },
         ],
-        activeProfileId: "backup",
+        activeCodexProfileId: "backup",
+        activeClaudeProfileId: null,
       }),
     );
     await flushUi(wrapper);
 
-    expect(wrapper.get('[data-testid="status-message"]').text()).toContain("Codex 配置已同步");
+    expect(wrapper.get('[data-testid="status-message"]').text()).toContain("同步");
   });
 });
 

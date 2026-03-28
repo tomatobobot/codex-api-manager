@@ -26,12 +26,17 @@ const editingId = ref<string | null>(null);
 const form = reactive<ProfileForm>(emptyForm());
 
 const profiles = computed(() => state.value?.profiles ?? []);
-const activeProfileId = computed(() => state.value?.activeProfileId ?? null);
+const activeCodexProfileId = computed(() => state.value?.activeCodexProfileId ?? null);
+const activeClaudeProfileId = computed(() => state.value?.activeClaudeProfileId ?? null);
+function isActiveProfile(profile: Profile) {
+  if (profile.profileType === 'claude') return profile.id === activeClaudeProfileId.value;
+  return profile.id === activeCodexProfileId.value;
+}
 const isBusy = computed(
   () => isLoading.value || isSaving.value || switchingId.value !== null,
 );
 const currentProfile = computed(() => {
-  const targetId = editingId.value ?? activeProfileId.value;
+  const targetId = editingId.value ?? activeCodexProfileId.value ?? activeClaudeProfileId.value;
   return profiles.value.find((profile) => profile.id === targetId) ?? null;
 });
 const editorHeading = computed(() =>
@@ -188,7 +193,7 @@ function toMessage(error: unknown) {
             v-for="profile in profiles"
             :key="profile.id"
             class="profile-card"
-            :class="{ active: profile.id === activeProfileId, editing: profile.id === editingId }"
+            :class="{ active: isActiveProfile(profile), editing: profile.id === editingId }"
           >
             <button class="profile-main" type="button" @click="editProfile(profile)">
               <div class="profile-line">
@@ -196,13 +201,13 @@ function toMessage(error: unknown) {
                 <span class="type-badge" :class="profile.profileType">{{ profile.profileType === 'claude' ? 'Claude' : 'Codex' }}</span>
               </div>
               <p class="profile-url">{{ profile.baseUrl }}</p>
-              <span v-if="profile.id === activeProfileId" class="active-tag">生效中</span>
+              <span v-if="isActiveProfile(profile)" class="active-tag">✓ 生效中</span>
             </button>
           </li>
         </ul>
       </aside>
 
-      <section class="editor">
+      <section class="editor" data-testid="profile-editor">
         <div class="editor-head">
           <div class="editor-title">
             <span class="section-label">{{ editorHeading }}</span>
@@ -211,8 +216,8 @@ function toMessage(error: unknown) {
           <div class="editor-head-actions">
             <button v-if="editingId" class="icon-button danger" type="button" @click="removeProfile(editingId)">删除</button>
             <button
-              v-if="currentProfile && currentProfile.id !== activeProfileId"
-              class="primary-button" type="button"
+              v-if="currentProfile && !isActiveProfile(currentProfile)"
+              class="primary-button" type="button" data-testid="switch-current-profile"
               @click="switchProfile(currentProfile.id)"
               :disabled="switchingId !== null"
             >{{ switchingId === currentProfile.id ? '切换中...' : '切换为当前' }}</button>
@@ -448,15 +453,18 @@ function toMessage(error: unknown) {
 .active-tag {
   display: inline-flex;
   align-items: center;
-  padding: 1px 6px;
+  gap: 3px;
+  padding: 2px 8px;
   border-radius: var(--radius-full);
-  background: var(--sidebar-tag-bg);
-  color: var(--sidebar-tag-color);
+  background: var(--color-success-bg);
+  color: var(--color-success);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
   flex-shrink: 0;
   margin-top: 4px;
+  border: 1px solid currentColor;
+  letter-spacing: 0.02em;
 }
 
 .type-badge {

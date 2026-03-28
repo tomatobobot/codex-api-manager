@@ -245,8 +245,8 @@ pub fn resolve_active_profile_ids(
             .parse()
             .map_err(|e| format!("config.toml 格式不正确: {e}"))?;
         let api_key = auth_json.get("OPENAI_API_KEY").and_then(JsonValue::as_str);
-        let base_url = config_toml.get("base_url").and_then(TomlValue::as_str);
-        if let (Some(k), Some(u)) = (api_key, base_url) {
+        let base_url = extract_codex_base_url(&config_toml);
+        if let (Some(k), Some(u)) = (api_key, base_url.as_deref()) {
             Some(ActiveCodexValues { api_key: k.to_string(), base_url: u.to_string(), profile_type: ProfileType::Codex })
         } else { None }
     } else { None };
@@ -367,12 +367,62 @@ fn update_config_toml_str(input: &str, base_url: &str) -> Result<String, String>
         _ => return Err("config.toml 顶层必须是表".to_string()),
     };
 
-    table.insert(
-        "base_url".to_string(),
-        TomlValue::String(base_url.to_string()),
-    );
+    if let Some(provider_name) = table
+        .get("model_provider")
+        .and_then(TomlValue::as_str)
+        .map(str::to_string)
+    {
+        let providers = table
+            .entry("model_providers".to_string())
+            .or_insert_with(|| TomlValue::Table(toml::Table::new()));
+        let providers_table = match providers {
+            TomlValue::Table(table) => table,
+            _ => return Err("config.toml 的 model_providers 必须是表".to_string()),
+        };
+
+        let provider = providers_table
+            .entry(provider_name)
+            .or_insert_with(|| TomlValue::Table(toml::Table::new()));
+        let provider_table = match provider {
+            TomlValue::Table(table) => table,
+            _ => return Err("config.toml 的 model_provider 配置必须是表".to_string()),
+        };
+
+        provider_table.insert(
+            "base_url".to_string(),
+            TomlValue::String(base_url.to_string()),
+        );
+    } else {
+        table.insert(
+            "base_url".to_string(),
+            TomlValue::String(base_url.to_string()),
+        );
+    }
 
     toml::to_string(&table).map_err(|error| format!("生成 config.toml 内容失败: {error}"))
+}
+
+fn extract_codex_base_url(config_toml: &TomlValue) -> Option<String> {
+    if let Some(provider_name) = config_toml
+        .get("model_provider")
+        .and_then(TomlValue::as_str)
+    {
+        if let Some(base_url) = config_toml
+            .get("model_providers")
+            .and_then(TomlValue::as_table)
+            .and_then(|providers| providers.get(provider_name))
+            .and_then(TomlValue::as_table)
+            .and_then(|provider| provider.get("base_url"))
+            .and_then(TomlValue::as_str)
+        {
+            return Some(base_url.to_string());
+        }
+    }
+
+    config_toml
+        .get("base_url")
+        .and_then(TomlValue::as_str)
+        .map(str::to_string)
 }
 
 #[cfg(test)]
@@ -446,6 +496,39 @@ mod tests {
     }
 
     #[test]
+    fn updates_model_provider_base_url_when_provider_section_exists() {
+        let auth_path = unique_temp_file("auth.json");
+        let config_path = unique_temp_file("config.toml");
+        fs::write(&auth_path, "{\n  \"OPENAI_API_KEY\": \"old-key\"\n}").unwrap();
+        fs::write(
+            &config_path,
+            "model_provider = \"codex-for-me\"\n\n[model_providers.codex-for-me]\nbase_url = \"https://old.example.com\"\nname = \"openai\"\n",
+        )
+        .unwrap();
+
+        let profile = Profile {
+            id: "secondary".into(),
+            name: "Secondary".into(),
+            api_key: "sk-secondary".into(),
+            base_url: "https://new.example.com".into(),
+            profile_type: ProfileType::Codex,
+        };
+
+        apply_profile_to_paths(
+            &profile,
+            &auth_path,
+            &config_path,
+            &unique_temp_file("settings.json"),
+        )
+        .unwrap();
+
+        let config_text = fs::read_to_string(&config_path).unwrap();
+        assert!(config_text.contains("model_provider = \"codex-for-me\""));
+        assert!(config_text.contains("[model_providers.codex-for-me]"));
+        assert!(config_text.contains("base_url = \"https://new.example.com\""));
+    }
+
+    #[test]
     fn matches_the_current_profile_from_live_values() {
         let profiles = vec![
             Profile {
@@ -471,6 +554,40 @@ mod tests {
         };
 
         assert_eq!(match_active_profile(&profiles, &active), Some("second".into()));
+    }
+
+    #[test]
+    fn resolves_active_codex_profile_from_model_provider_section() {
+        let auth_path = unique_temp_file("auth.json");
+        let config_path = unique_temp_file("config.toml");
+        let claude_path = unique_temp_file("settings.json");
+        fs::write(&auth_path, "{\n  \"OPENAI_API_KEY\": \"sk-second\"\n}").unwrap();
+        fs::write(
+            &config_path,
+            "model_provider = \"codex-for-me\"\n\n[model_providers.codex-for-me]\nbase_url = \"https://second.example.com\"\nname = \"openai\"\n",
+        )
+        .unwrap();
+
+        let profiles = vec![Profile {
+            id: "second".into(),
+            name: "Second".into(),
+            api_key: "sk-second".into(),
+            base_url: "https://second.example.com".into(),
+            profile_type: ProfileType::Codex,
+        }];
+
+        let (active_codex_profile_id, active_claude_profile_id) = resolve_active_profile_ids(
+            &profiles,
+            &AppPaths {
+                auth_json: auth_path,
+                config_toml: config_path,
+                claude_settings_json: claude_path,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(active_codex_profile_id, Some("second".into()));
+        assert_eq!(active_claude_profile_id, None);
     }
 
     #[test]

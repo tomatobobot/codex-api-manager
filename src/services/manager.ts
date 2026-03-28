@@ -18,7 +18,8 @@ export interface CodexPaths {
 
 export interface ManagerState {
   profiles: Profile[];
-  activeProfileId: string | null;
+  activeCodexProfileId: string | null;
+  activeClaudeProfileId: string | null;
   codexPaths: CodexPaths;
 }
 

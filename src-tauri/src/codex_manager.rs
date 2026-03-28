@@ -45,7 +45,8 @@ pub struct ActiveCodexValues {
 #[serde(rename_all = "camelCase")]
 pub struct ManagerState {
     pub profiles: Vec<Profile>,
-    pub active_profile_id: Option<String>,
+    pub active_codex_profile_id: Option<String>,
+    pub active_claude_profile_id: Option<String>,
     pub codex_paths: ResolvedCodexPaths,
 }
 
@@ -215,57 +216,6 @@ fn apply_claude_profile(profile: &Profile, settings_path: &Path) -> Result<(), S
     Ok(())
 }
 
-pub fn read_active_codex_values(paths: &AppPaths) -> Result<Option<ActiveCodexValues>, String> {
-    // Try Claude first
-    if paths.claude_settings_json.exists() {
-        if let Ok(source) = fs::read_to_string(&paths.claude_settings_json) {
-            if let Ok(JsonValue::Object(root)) = serde_json::from_str::<JsonValue>(&source) {
-                if let Some(JsonValue::Object(env)) = root.get("env") {
-                    let token = env.get("ANTHROPIC_AUTH_TOKEN").and_then(JsonValue::as_str);
-                    let base_url = env.get("ANTHROPIC_BASE_URL").and_then(JsonValue::as_str);
-                    if let (Some(token), Some(base_url)) = (token, base_url) {
-                        return Ok(Some(ActiveCodexValues {
-                            api_key: token.to_string(),
-                            base_url: base_url.to_string(),
-                            profile_type: ProfileType::Claude,
-                        }));
-                    }
-                }
-            }
-        }
-    }
-
-    // Try Codex
-    if !paths.auth_json.exists() || !paths.config_toml.exists() {
-        return Ok(None);
-    }
-
-    let auth_source = fs::read_to_string(&paths.auth_json)
-        .map_err(|error| format!("读取 auth.json 失败: {error}"))?;
-    let config_source = fs::read_to_string(&paths.config_toml)
-        .map_err(|error| format!("读取 config.toml 失败: {error}"))?;
-
-    let auth_json: JsonValue = serde_json::from_str(&auth_source)
-        .map_err(|error| format!("auth.json 格式不正确: {error}"))?;
-    let config_toml: TomlValue =
-        config_source.parse().map_err(|error| format!("config.toml 格式不正确: {error}"))?;
-
-    let api_key = auth_json
-        .get("OPENAI_API_KEY")
-        .and_then(JsonValue::as_str)
-        .ok_or_else(|| "auth.json 缺少 OPENAI_API_KEY".to_string())?;
-    let base_url = config_toml
-        .get("base_url")
-        .and_then(TomlValue::as_str)
-        .ok_or_else(|| "config.toml 缺少 base_url".to_string())?;
-
-    Ok(Some(ActiveCodexValues {
-        api_key: api_key.to_string(),
-        base_url: base_url.to_string(),
-        profile_type: ProfileType::Codex,
-    }))
-}
-
 pub fn match_active_profile(
     profiles: &[Profile],
     active: &ActiveCodexValues,
@@ -280,16 +230,57 @@ pub fn match_active_profile(
         .map(|profile| profile.id.clone())
 }
 
+pub fn resolve_active_profile_ids(
+    profiles: &[Profile],
+    paths: &AppPaths,
+) -> Result<(Option<String>, Option<String>), String> {
+    let codex_active = if paths.auth_json.exists() && paths.config_toml.exists() {
+        let auth_source = fs::read_to_string(&paths.auth_json)
+            .map_err(|e| format!("读取 auth.json 失败: {e}"))?;
+        let config_source = fs::read_to_string(&paths.config_toml)
+            .map_err(|e| format!("读取 config.toml 失败: {e}"))?;
+        let auth_json: JsonValue = serde_json::from_str(&auth_source)
+            .map_err(|e| format!("auth.json 格式不正确: {e}"))?;
+        let config_toml: TomlValue = config_source
+            .parse()
+            .map_err(|e| format!("config.toml 格式不正确: {e}"))?;
+        let api_key = auth_json.get("OPENAI_API_KEY").and_then(JsonValue::as_str);
+        let base_url = config_toml.get("base_url").and_then(TomlValue::as_str);
+        if let (Some(k), Some(u)) = (api_key, base_url) {
+            Some(ActiveCodexValues { api_key: k.to_string(), base_url: u.to_string(), profile_type: ProfileType::Codex })
+        } else { None }
+    } else { None };
+
+    let claude_active = if paths.claude_settings_json.exists() {
+        if let Ok(source) = fs::read_to_string(&paths.claude_settings_json) {
+            if let Ok(JsonValue::Object(root)) = serde_json::from_str::<JsonValue>(&source) {
+                if let Some(JsonValue::Object(env)) = root.get("env") {
+                    let token = env.get("ANTHROPIC_AUTH_TOKEN").and_then(JsonValue::as_str);
+                    let base_url = env.get("ANTHROPIC_BASE_URL").and_then(JsonValue::as_str);
+                    if let (Some(t), Some(u)) = (token, base_url) {
+                        Some(ActiveCodexValues { api_key: t.to_string(), base_url: u.to_string(), profile_type: ProfileType::Claude })
+                    } else { None }
+                } else { None }
+            } else { None }
+        } else { None }
+    } else { None };
+
+    let active_codex_id = codex_active.as_ref().and_then(|a| match_active_profile(profiles, a));
+    let active_claude_id = claude_active.as_ref().and_then(|a| match_active_profile(profiles, a));
+    Ok((active_codex_id, active_claude_id))
+}
+
 pub fn build_manager_state(
     profiles: Vec<Profile>,
     codex_paths: AppPaths,
 ) -> Result<ManagerState, String> {
-    let active_profile_id = read_active_codex_values(&codex_paths)?
-        .and_then(|active| match_active_profile(&profiles, &active));
+    let (active_codex_profile_id, active_claude_profile_id) =
+        resolve_active_profile_ids(&profiles, &codex_paths)?;
 
     Ok(ManagerState {
         profiles,
-        active_profile_id,
+        active_codex_profile_id,
+        active_claude_profile_id,
         codex_paths: ResolvedCodexPaths {
             auth_json: codex_paths.auth_json.to_string_lossy().into_owned(),
             config_toml: codex_paths.config_toml.to_string_lossy().into_owned(),
@@ -302,14 +293,13 @@ pub fn build_manager_state_for_local_save(
     profiles: Vec<Profile>,
     codex_paths: AppPaths,
 ) -> ManagerState {
-    let active_profile_id = read_active_codex_values(&codex_paths)
-        .ok()
-        .flatten()
-        .and_then(|active| match_active_profile(&profiles, &active));
+    let (active_codex_profile_id, active_claude_profile_id) =
+        resolve_active_profile_ids(&profiles, &codex_paths).unwrap_or((None, None));
 
     ManagerState {
         profiles,
-        active_profile_id,
+        active_codex_profile_id,
+        active_claude_profile_id,
         codex_paths: ResolvedCodexPaths {
             auth_json: codex_paths.auth_json.to_string_lossy().into_owned(),
             config_toml: codex_paths.config_toml.to_string_lossy().into_owned(),
@@ -507,7 +497,8 @@ mod tests {
         );
 
         assert_eq!(state.profiles, profiles);
-        assert_eq!(state.active_profile_id, None);
+        assert_eq!(state.active_codex_profile_id, None);
+        assert_eq!(state.active_claude_profile_id, None);
     }
 
     fn unique_temp_file(file_name: &str) -> PathBuf {

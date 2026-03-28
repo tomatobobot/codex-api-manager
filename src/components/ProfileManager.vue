@@ -139,7 +139,12 @@ async function switchProfile(profileId: string) {
   try {
     state.value = await activateProfile(profileId);
     const active = profiles.value.find((profile) => profile.id === profileId);
-    message.value = active ? `已切换到 ${active.name}，Codex 配置已同步。` : "切换完成";
+    if (active) {
+      const target = active.profileType === 'claude' ? 'Claude Code 配置' : 'Codex 配置';
+      message.value = `已切换到 ${active.name}，${target}已同步。`;
+    } else {
+      message.value = "切换完成";
+    }
   } catch (error) {
     message.value = toMessage(error);
   } finally {
@@ -160,7 +165,7 @@ async function refreshState() {
 }
 
 function createProfileId() {
-  return `profile-${Date.now()}`;
+  return `profile-${crypto.randomUUID()}`;
 }
 
 function toMessage(error: unknown) {

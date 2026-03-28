@@ -24,6 +24,9 @@ pub struct Profile {
     pub name: String,
     pub api_key: String,
     pub base_url: String,
+    /// 模型名称，Codex 写入 config.toml 顶层 model，Claude 写入 settings.json 顶层 model
+    #[serde(default)]
+    pub model: String,
     #[serde(default)]
     pub profile_type: ProfileType,
 }
@@ -173,7 +176,7 @@ fn apply_codex_profile(
     };
 
     let auth_content = update_auth_json_str(&auth_source, &profile.api_key)?;
-    let config_content = update_config_toml_str(&config_source, &profile.base_url)?;
+    let config_content = update_config_toml_str(&config_source, &profile.base_url, &profile.model)?;
 
     if let Some(parent) = auth_path.parent() {
         fs::create_dir_all(parent)
@@ -190,8 +193,8 @@ fn apply_codex_profile(
     Ok(())
 }
 
-/// 将 Claude Code 账号的 token 和 Base URL 写入 ~/.claude/settings.json 的 env 字段。
-/// 文件原有内容会被保留，只更新 env.ANTHROPIC_AUTH_TOKEN 和 env.ANTHROPIC_BASE_URL。
+/// 将 Claude Code 账号的 token、Base URL 和模型写入 ~/.claude/settings.json。
+/// 文件原有内容会被保留，只更新 env.ANTHROPIC_AUTH_TOKEN、env.ANTHROPIC_BASE_URL 和顶层 model。
 fn apply_claude_profile(profile: &Profile, settings_path: &Path) -> Result<(), String> {
     let source = if settings_path.exists() {
         fs::read_to_string(settings_path)
@@ -227,6 +230,13 @@ fn apply_claude_profile(profile: &Profile, settings_path: &Path) -> Result<(), S
         "ANTHROPIC_BASE_URL".to_string(),
         JsonValue::String(profile.base_url.clone()),
     );
+
+    if !profile.model.trim().is_empty() {
+        root.insert(
+            "model".to_string(),
+            JsonValue::String(profile.model.clone()),
+        );
+    }
 
     if let Some(parent) = settings_path.parent() {
         fs::create_dir_all(parent)
@@ -402,10 +412,10 @@ fn update_auth_json_str(input: &str, api_key: &str) -> Result<String, String> {
         .map_err(|error| format!("生成 auth.json 内容失败: {error}"))
 }
 
-/// 将 base_url 写入 config.toml 字符串，保留其他字段，返回新的 TOML 字符串。
+/// 将 base_url 和 model 写入 config.toml 字符串，保留其他字段，返回新的 TOML 字符串。
 /// 若存在 model_provider 字段，则将 base_url 写入对应 provider 的子表；
-/// 否则直接写入顶层 base_url。
-fn update_config_toml_str(input: &str, base_url: &str) -> Result<String, String> {
+/// 否则直接写入顶层 base_url。model 始终写入顶层。
+fn update_config_toml_str(input: &str, base_url: &str, model: &str) -> Result<String, String> {
     let parsed = if input.trim().is_empty() {
         TomlValue::Table(toml::Table::new())
     } else {
@@ -448,6 +458,13 @@ fn update_config_toml_str(input: &str, base_url: &str) -> Result<String, String>
         table.insert(
             "base_url".to_string(),
             TomlValue::String(base_url.to_string()),
+        );
+    }
+
+    if !model.trim().is_empty() {
+        table.insert(
+            "model".to_string(),
+            TomlValue::String(model.to_string()),
         );
     }
 
@@ -496,6 +513,7 @@ mod tests {
             name: "Primary".into(),
             api_key: "sk-primary".into(),
             base_url: "https://api.example.com".into(),
+            model: "".into(),
             profile_type: ProfileType::Codex,
         }];
 
@@ -539,6 +557,7 @@ mod tests {
             name: "Secondary".into(),
             api_key: "sk-secondary".into(),
             base_url: "https://new.example.com".into(),
+            model: "".into(),
             profile_type: ProfileType::Codex,
         };
 
@@ -566,6 +585,7 @@ mod tests {
             name: "Secondary".into(),
             api_key: "sk-secondary".into(),
             base_url: "https://new.example.com".into(),
+            model: "".into(),
             profile_type: ProfileType::Codex,
         };
 
@@ -591,6 +611,7 @@ mod tests {
                 name: "First".into(),
                 api_key: "sk-first".into(),
                 base_url: "https://first.example.com".into(),
+                model: "".into(),
                 profile_type: ProfileType::Codex,
             },
             Profile {
@@ -598,6 +619,7 @@ mod tests {
                 name: "Second".into(),
                 api_key: "sk-second".into(),
                 base_url: "https://second.example.com".into(),
+                model: "".into(),
                 profile_type: ProfileType::Codex,
             },
         ];
@@ -628,6 +650,7 @@ mod tests {
             name: "Second".into(),
             api_key: "sk-second".into(),
             base_url: "https://second.example.com".into(),
+            model: "".into(),
             profile_type: ProfileType::Codex,
         }];
 
@@ -652,6 +675,7 @@ mod tests {
             name: "First".into(),
             api_key: "sk-first".into(),
             base_url: "https://first.example.com".into(),
+            model: "".into(),
             profile_type: ProfileType::Codex,
         }];
         let auth_path = unique_temp_file("auth.json");

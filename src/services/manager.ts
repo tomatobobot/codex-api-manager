@@ -7,6 +7,7 @@ export interface Profile {
   name: string;
   apiKey: string;
   baseUrl: string;
+  model: string;
   profileType: ProfileType;
 }
 

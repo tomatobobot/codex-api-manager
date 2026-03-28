@@ -27,6 +27,7 @@ function createState(overrides: Partial<ManagerState> = {}): ManagerState {
       name: "Primary",
       apiKey: "sk-primary",
       baseUrl: "https://primary.example.com",
+      model: "",
       profileType: "codex",
     },
   ];
@@ -88,6 +89,7 @@ describe("ProfileManager", () => {
             name: "Primary",
             apiKey: "sk-primary",
             baseUrl: "https://primary.example.com",
+            model: "",
             profileType: "codex",
           },
           {
@@ -95,6 +97,7 @@ describe("ProfileManager", () => {
             name: "Local Only",
             apiKey: "sk-local",
             baseUrl: "https://local.example.com",
+            model: "",
             profileType: "codex",
           },
         ],
@@ -130,6 +133,7 @@ describe("ProfileManager", () => {
             name: "Primary",
             apiKey: "sk-primary",
             baseUrl: "https://primary.example.com",
+            model: "",
             profileType: "codex",
           },
           {
@@ -137,6 +141,7 @@ describe("ProfileManager", () => {
             name: "Backup",
             apiKey: "sk-backup",
             baseUrl: "https://backup.example.com",
+            model: "",
             profileType: "codex",
           },
         ],
@@ -171,6 +176,7 @@ describe("ProfileManager", () => {
             name: "Primary",
             apiKey: "sk-primary",
             baseUrl: "https://primary.example.com",
+            model: "",
             profileType: "codex",
           },
           {
@@ -178,6 +184,7 @@ describe("ProfileManager", () => {
             name: "Backup",
             apiKey: "sk-backup",
             baseUrl: "https://backup.example.com",
+            model: "",
             profileType: "codex",
           },
         ],

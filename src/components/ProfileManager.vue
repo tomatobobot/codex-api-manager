@@ -14,6 +14,7 @@ type ProfileForm = {
   name: string;
   apiKey: string;
   baseUrl: string;
+  model: string;
   profileType: ProfileType;
 };
 
@@ -54,6 +55,7 @@ function emptyForm(): ProfileForm {
     name: "",
     apiKey: "",
     baseUrl: "",
+    model: "",
     profileType: "codex",
   };
 }
@@ -89,6 +91,7 @@ async function handleSave() {
     name: form.name.trim(),
     apiKey: form.apiKey.trim(),
     baseUrl: form.baseUrl.trim(),
+    model: form.model.trim(),
     profileType: form.profileType,
   };
 
@@ -252,10 +255,16 @@ function toMessage(error: unknown) {
             </label>
           </div>
 
-          <label class="field">
-            <span>API Key</span>
-            <input v-model="form.apiKey" data-testid="api-key-input" placeholder="sk-..." />
-          </label>
+          <div class="field-row">
+            <label class="field">
+              <span>API Key</span>
+              <input v-model="form.apiKey" data-testid="api-key-input" placeholder="sk-..." />
+            </label>
+            <label class="field">
+              <span>模型</span>
+              <input v-model="form.model" placeholder="例如：gpt-5.4" />
+            </label>
+          </div>
 
           <div class="status-bar" v-if="state">
             <div class="path-stack">
@@ -279,6 +288,7 @@ function toMessage(error: unknown) {
           </div>
 
           <div class="form-footer">
+            <p class="local-save-note" data-testid="local-save-note">只会写入本地列表，切换账号后才同步到配置文件。</p>
             <p v-if="message" class="status-text" data-testid="status-message">{{ message }}</p>
             <button class="primary-button" type="submit" :disabled="isSaving || isLoading">
               {{ isSaving ? '保存中...' : editingId ? '保存修改' : '保存账号' }}

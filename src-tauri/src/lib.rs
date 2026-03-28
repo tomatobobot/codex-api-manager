@@ -7,6 +7,8 @@ use codex_manager::{
 };
 use tauri::{AppHandle, Manager};
 
+/// 加载完整的管理器状态：从应用配置目录读取账号列表，
+/// 并读取当前系统的 Codex / Claude 配置文件来确定哪个账号正在生效。
 #[tauri::command]
 fn load_manager_state(app: AppHandle) -> Result<ManagerState, String> {
     let app_config_dir = app
@@ -19,6 +21,8 @@ fn load_manager_state(app: AppHandle) -> Result<ManagerState, String> {
     build_manager_state(profiles, codex_paths)
 }
 
+/// 保存账号列表到应用配置目录（不修改 Codex / Claude 配置文件）。
+/// 返回的状态中 active_*_profile_id 尽力读取，失败时为 None。
 #[tauri::command]
 fn save_profiles(app: AppHandle, profiles: Vec<Profile>) -> Result<ManagerState, String> {
     let app_config_dir = app
@@ -31,6 +35,8 @@ fn save_profiles(app: AppHandle, profiles: Vec<Profile>) -> Result<ManagerState,
     Ok(build_manager_state_for_local_save(profiles, codex_paths))
 }
 
+/// 切换到指定账号：将该账号的 API Key 和 Base URL 写入对应配置文件，
+/// 然后重新读取状态返回给前端。
 #[tauri::command]
 fn activate_profile(app: AppHandle, profile_id: String) -> Result<ManagerState, String> {
     let app_config_dir = app

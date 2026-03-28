@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value as JsonValue};
 use toml::Value as TomlValue;
 
+/// 账号类型：Codex 对应 OpenAI Codex CLI，Claude 对应 Claude Code。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum ProfileType {
@@ -15,6 +16,7 @@ pub enum ProfileType {
     Claude,
 }
 
+/// 存储在本地列表中的账号信息。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Profile {
@@ -26,14 +28,19 @@ pub struct Profile {
     pub profile_type: ProfileType,
 }
 
+/// 各配置文件的绝对路径（PathBuf），用于实际读写。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPaths {
+    /// ~/.codex/auth.json
     pub auth_json: PathBuf,
+    /// ~/.codex/config.toml
     pub config_toml: PathBuf,
+    /// ~/.claude/settings.json
     pub claude_settings_json: PathBuf,
 }
 
+/// 从配置文件中读取到的当前生效值，用于与账号列表比对。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActiveCodexValues {
     pub api_key: String,
@@ -41,15 +48,21 @@ pub struct ActiveCodexValues {
     pub profile_type: ProfileType,
 }
 
+/// 返回给前端的完整状态。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManagerState {
+    /// 本地账号列表
     pub profiles: Vec<Profile>,
+    /// 当前写入 Codex 配置文件的账号 id（若与列表中某条匹配）
     pub active_codex_profile_id: Option<String>,
+    /// 当前写入 Claude 配置文件的账号 id（若与列表中某条匹配）
     pub active_claude_profile_id: Option<String>,
+    /// 各配置文件路径（字符串，供前端展示）
     pub codex_paths: ResolvedCodexPaths,
 }
 
+/// 各配置文件路径的字符串形式，序列化后发送给前端。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolvedCodexPaths {
@@ -58,10 +71,12 @@ pub struct ResolvedCodexPaths {
     pub claude_settings_json: String,
 }
 
+/// 返回账号列表文件的路径（位于 Tauri 应用配置目录下）。
 pub fn profiles_file_path(app_config_dir: &Path) -> PathBuf {
     app_config_dir.join("profiles.json")
 }
 
+/// 从指定路径读取账号列表。文件不存在时返回空列表。
 pub fn load_profiles_from_path(file_path: &Path) -> Result<Vec<Profile>, String> {
     if !file_path.exists() {
         return Ok(Vec::new());
@@ -73,6 +88,7 @@ pub fn load_profiles_from_path(file_path: &Path) -> Result<Vec<Profile>, String>
     serde_json::from_str(&raw).map_err(|error| format!("账号列表格式不正确: {error}"))
 }
 
+/// 将账号列表序列化并写入指定路径，写入前先做合法性校验。
 pub fn save_profiles_to_path(file_path: &Path, profiles: &[Profile]) -> Result<(), String> {
     validate_profiles(profiles)?;
 
@@ -87,6 +103,7 @@ pub fn save_profiles_to_path(file_path: &Path, profiles: &[Profile]) -> Result<(
     fs::write(file_path, content).map_err(|error| format!("保存账号列表失败: {error}"))
 }
 
+/// 根据操作系统和用户目录构造各配置文件的路径（用于测试时注入）。
 pub fn resolve_codex_paths(os: &str, home_dir: &Path) -> Result<AppPaths, String> {
     let codex_dir = match os {
         "windows" | "macos" | "linux" => home_dir.join(".codex"),
@@ -103,6 +120,7 @@ pub fn resolve_codex_paths(os: &str, home_dir: &Path) -> Result<AppPaths, String
     })
 }
 
+/// 在运行时自动检测当前操作系统和用户目录，构造配置文件路径。
 pub fn resolve_runtime_codex_paths() -> Result<AppPaths, String> {
     let os = env::consts::OS;
     let home_dir = match os {
@@ -120,6 +138,8 @@ pub fn resolve_runtime_codex_paths() -> Result<AppPaths, String> {
     resolve_codex_paths(os, Path::new(&home_dir))
 }
 
+/// 将账号配置写入对应的配置文件。
+/// Codex 账号写入 auth.json + config.toml，Claude 账号写入 settings.json。
 pub fn apply_profile_to_paths(
     profile: &Profile,
     auth_path: &Path,
@@ -132,6 +152,8 @@ pub fn apply_profile_to_paths(
     }
 }
 
+/// 将 Codex 账号的 API Key 写入 auth.json，Base URL 写入 config.toml。
+/// 两个文件原有内容会被保留，只更新相关字段。
 fn apply_codex_profile(
     profile: &Profile,
     auth_path: &Path,
@@ -168,6 +190,8 @@ fn apply_codex_profile(
     Ok(())
 }
 
+/// 将 Claude Code 账号的 token 和 Base URL 写入 ~/.claude/settings.json 的 env 字段。
+/// 文件原有内容会被保留，只更新 env.ANTHROPIC_AUTH_TOKEN 和 env.ANTHROPIC_BASE_URL。
 fn apply_claude_profile(profile: &Profile, settings_path: &Path) -> Result<(), String> {
     let source = if settings_path.exists() {
         fs::read_to_string(settings_path)
@@ -216,6 +240,8 @@ fn apply_claude_profile(profile: &Profile, settings_path: &Path) -> Result<(), S
     Ok(())
 }
 
+/// 通过比较账号的 api_key、base_url、profile_type 与列表中各账号匹配，
+/// 返回匹配账号的 id。
 pub fn match_active_profile(
     profiles: &[Profile],
     active: &ActiveCodexValues,
@@ -230,6 +256,8 @@ pub fn match_active_profile(
         .map(|profile| profile.id.clone())
 }
 
+/// 读取当前 Codex 和 Claude 配置文件中的生效值，与账号列表比对，
+/// 分别返回 Codex 和 Claude 的生效账号 id。
 pub fn resolve_active_profile_ids(
     profiles: &[Profile],
     paths: &AppPaths,
@@ -270,6 +298,8 @@ pub fn resolve_active_profile_ids(
     Ok((active_codex_id, active_claude_id))
 }
 
+/// 构造完整的 ManagerState，会读取配置文件来确定当前生效账号。
+/// 用于 load_manager_state 和 activate_profile 命令。
 pub fn build_manager_state(
     profiles: Vec<Profile>,
     codex_paths: AppPaths,
@@ -289,6 +319,9 @@ pub fn build_manager_state(
     })
 }
 
+/// 构造 ManagerState 供保存账号后返回。
+/// 与 build_manager_state 的区别：配置文件读取失败时不报错，active_*_id 降级为 None。
+/// 用于 save_profiles 命令，此时用户只修改了本地列表，配置文件可能尚未同步。
 pub fn build_manager_state_for_local_save(
     profiles: Vec<Profile>,
     codex_paths: AppPaths,
@@ -308,6 +341,7 @@ pub fn build_manager_state_for_local_save(
     }
 }
 
+/// 校验账号列表的合法性：id/name/api_key/base_url 不能为空，id 不能重复。
 fn validate_profiles(profiles: &[Profile]) -> Result<(), String> {
     let mut ids = std::collections::HashSet::new();
 
@@ -332,6 +366,7 @@ fn validate_profiles(profiles: &[Profile]) -> Result<(), String> {
     Ok(())
 }
 
+/// 将 OPENAI_API_KEY 写入 auth.json 字符串，保留其他字段，返回新的 JSON 字符串。
 fn update_auth_json_str(input: &str, api_key: &str) -> Result<String, String> {
     let parsed = if input.trim().is_empty() {
         JsonValue::Object(Map::new())
@@ -353,6 +388,9 @@ fn update_auth_json_str(input: &str, api_key: &str) -> Result<String, String> {
         .map_err(|error| format!("生成 auth.json 内容失败: {error}"))
 }
 
+/// 将 base_url 写入 config.toml 字符串，保留其他字段，返回新的 TOML 字符串。
+/// 若存在 model_provider 字段，则将 base_url 写入对应 provider 的子表；
+/// 否则直接写入顶层 base_url。
 fn update_config_toml_str(input: &str, base_url: &str) -> Result<String, String> {
     let parsed = if input.trim().is_empty() {
         TomlValue::Table(toml::Table::new())
@@ -402,6 +440,9 @@ fn update_config_toml_str(input: &str, base_url: &str) -> Result<String, String>
     toml::to_string(&table).map_err(|error| format!("生成 config.toml 内容失败: {error}"))
 }
 
+/// 从 config.toml 中提取 base_url。
+/// 优先从 model_providers.<model_provider>.base_url 读取；
+/// 若不存在则回退到顶层 base_url。
 fn extract_codex_base_url(config_toml: &TomlValue) -> Option<String> {
     if let Some(provider_name) = config_toml
         .get("model_provider")

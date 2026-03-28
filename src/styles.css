@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   /* Design Tokens */
   --color-primary: #2563eb;

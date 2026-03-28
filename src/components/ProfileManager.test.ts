@@ -27,6 +27,7 @@ function createState(overrides: Partial<ManagerState> = {}): ManagerState {
       name: "Primary",
       apiKey: "sk-primary",
       baseUrl: "https://primary.example.com",
+      profileType: "codex",
     },
   ];
 
@@ -36,6 +37,7 @@ function createState(overrides: Partial<ManagerState> = {}): ManagerState {
     codexPaths: {
       authJson: "C:/Users/demo/.codex/auth.json",
       configToml: "C:/Users/demo/.codex/config.toml",
+      claudeSettingsJson: "C:/Users/demo/.claude/settings.json",
     },
     ...overrides,
   };
@@ -87,12 +89,14 @@ describe("ProfileManager", () => {
             name: "Primary",
             apiKey: "sk-primary",
             baseUrl: "https://primary.example.com",
+            profileType: "codex",
           },
           {
             id: "local-only",
             name: "Local Only",
             apiKey: "sk-local",
             baseUrl: "https://local.example.com",
+            profileType: "codex",
           },
         ],
       }),
@@ -126,12 +130,14 @@ describe("ProfileManager", () => {
             name: "Primary",
             apiKey: "sk-primary",
             baseUrl: "https://primary.example.com",
+            profileType: "codex",
           },
           {
             id: "backup",
             name: "Backup",
             apiKey: "sk-backup",
             baseUrl: "https://backup.example.com",
+            profileType: "codex",
           },
         ],
         activeProfileId: "primary",
@@ -161,12 +167,14 @@ describe("ProfileManager", () => {
             name: "Primary",
             apiKey: "sk-primary",
             baseUrl: "https://primary.example.com",
+            profileType: "codex",
           },
           {
             id: "backup",
             name: "Backup",
             apiKey: "sk-backup",
             baseUrl: "https://backup.example.com",
+            profileType: "codex",
           },
         ],
         activeProfileId: "backup",

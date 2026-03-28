@@ -164,14 +164,6 @@ function toMessage(error: unknown) {
   }
   return typeof error === "string" ? error : "操作失败，请稍后再试";
 }
-
-function maskApiKey(apiKey: string) {
-  if (apiKey.length <= 16) {
-    return apiKey;
-  }
-
-  return `${apiKey.slice(0, 7)}...${apiKey.slice(-6)}`;
-}
 </script>
 
 <template>

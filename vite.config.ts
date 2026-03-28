@@ -1,12 +1,13 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import tailwindcss from "@tailwindcss/vite";
 
 // @ts-expect-error process is a nodejs global
 const host = '127.0.0.1';
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [vue()],
+  plugins: [vue(), tailwindcss()],
   test: {
     environment: "jsdom",
   },

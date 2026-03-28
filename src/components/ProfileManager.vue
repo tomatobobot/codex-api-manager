@@ -262,7 +262,7 @@ function toMessage(error: unknown) {
             </label>
             <label class="field">
               <span>模型</span>
-              <input v-model="form.model" placeholder="例如：gpt-5.4" />
+              <input v-model="form.model" :placeholder="form.profileType === 'claude' ? '例如：anthropic/claude-sonnet-4-6' : '例如：gpt-5.4'" />
             </label>
           </div>
 
